@@ -124,7 +124,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	 *		6. 在 pod(netns) 里创建一个默认路由, 把匹配到 0.0.0.0 的 ip 都让其从 IfName 那块儿 veth 往外走
 	 *		7. 设置主机的 iptables, 让所有来自 bridgeName 的流量都能做 forward(因为 docker 可能会自己设置 iptables 不让转发的规则)
 	 */
-	err = nettools.CreateBridgeAndCreateVethAndSetNetworkDeviceStatusAndSetVethMaster(bridgeName, gatewayWithMaskSegment, ifName, podIP, mtu, netns)
+	err = nettools.CreateBridgeAndCreateVethAndSetNetworkDeviceStatusAndSetVethMaster(bridgeName, gateWayWithMaskSegment, ifName, podIP, mtu, netns)
 	if err != nil {
 		klog.Errorf("执行创建网桥, 创建 veth 设备, 添加默认路由等操作失败, err: ", err.Error())
 		err = ipamClient.Release().IPs(podIP)
@@ -161,7 +161,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	// 然后获取一下本机的网卡信息
 	currentNetwork, err := ipamClient.Get().HostNetwork()
 	if err != nil {
-		utils.WriteLog("获取本机网卡信息失败, err: ", err.Error())
+		klog.Errorf("获取本机网卡信息失败, err: ", err.Error())
 		return err
 	}
 
@@ -183,7 +183,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 		return err
 	}
 
-	_gw := net.ParseIP(gateway)
+	_gw := net.ParseIP(gateWay)
 
 	_, _podIP, _ := net.ParseCIDR(podIP)
 
