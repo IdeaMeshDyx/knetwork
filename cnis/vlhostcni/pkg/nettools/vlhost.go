@@ -13,7 +13,9 @@ import (
 	"os"
 )
 
+// CreateBridge 创建虚拟网桥
 func CreateBridge(brName, gw string, mtu int) (*netlink.Bridge, error) {
+	// 获取网桥对象
 	l, err := netlink.LinkByName(brName)
 
 	br, ok := l.(*netlink.Bridge)
@@ -21,6 +23,7 @@ func CreateBridge(brName, gw string, mtu int) (*netlink.Bridge, error) {
 		return br, nil
 	}
 
+	// 创建新的网桥并传入参数
 	br = &netlink.Bridge{
 		LinkAttrs: netlink.LinkAttrs{
 			Name:   brName,
@@ -29,9 +32,10 @@ func CreateBridge(brName, gw string, mtu int) (*netlink.Bridge, error) {
 		},
 	}
 
+	// 添加虚拟网桥
 	err = netlink.LinkAdd(br)
 	if err != nil {
-		klog.Errorf("无法创建网桥: ", brName, "err: ", err.Error())
+		klog.Errorf("create bridge failed", brName, "err: ", err.Error())
 		return nil, err
 	}
 
@@ -41,53 +45,58 @@ func CreateBridge(brName, gw string, mtu int) (*netlink.Bridge, error) {
 
 	br, ok = l.(*netlink.Bridge)
 	if !ok {
-		klog.Errorf("找到了设备, 但是该设备不是网桥")
-		return nil, fmt.Errorf("找到 %q 但该设备不是网桥", brName)
+		klog.Errorf("find dev but it is not bridge")
+		return nil, fmt.Errorf("find %q but it is not a bridge", brName)
 	}
 
 	// 给网桥绑定 ip 地址, 让网桥作为网关
+	// gw 的地址是从 IPAM 那里获取到的
 	ipaddr, ipnet, err := net.ParseCIDR(gw)
 	if err != nil {
-		klog.Errorf("无法 parse gw 为 ipnet, err: ", err.Error())
-		return nil, fmt.Errorf("gatewayIP 转换失败 %q: %v", gw, err)
+		klog.Errorf("can not parse gw CIDR, err: ", err.Error())
+		return nil, fmt.Errorf("gatewayIP parse failed %q: %v", gw, err)
 	}
+	// 将解析的地址拿出来并把这个地址绑定到网桥上
 	ipnet.IP = ipaddr
 	addr := &netlink.Addr{IPNet: ipnet}
 	if err = netlink.AddrAdd(br, addr); err != nil {
-		klog.Errorf("将 gw 添加到 bridge 失败, err: ", err.Error())
-		return nil, fmt.Errorf("无法将 %q 添加到网桥设备 %q, err: %v", addr, brName, err)
+		klog.Errorf("add gw IP to bridge failed, err: ", err.Error())
+		return nil, fmt.Errorf("can not add IP %q to bridge %q, err: %v", addr, brName, err)
 	}
 
 	// 然后还要把这个网桥给 up 起来
 	if err = netlink.LinkSetUp(br); err != nil {
-		klog.Errorf("启动网桥失败, err: ", err.Error())
-		return nil, fmt.Errorf("启动网桥 %q 失败, err: %v", brName, err)
+		klog.Errorf("setup bridge failed, err: ", err.Error())
+		return nil, fmt.Errorf("setup bridge %q failed, err: %v", brName, err)
 	}
 	return br, nil
 }
 
+// SetUpVeth 激活 veth 设备，传入的参数是 veth 列表
 func SetUpVeth(veth ...*netlink.Veth) error {
 	for _, v := range veth {
 		// 启动 veth 设备
 		err := netlink.LinkSetUp(v)
 		if err != nil {
-			klog.Errorf("启动 veth1 失败, err: ", err.Error())
+			klog.Errorf("setup veth %s failed, err: ", v.Name, err.Error())
 			return err
 		}
 	}
 	return nil
 }
 
+// CreateVethPair 创建 veth 对，初始会将一端放入到主机网络
 func CreateVethPair(ifName string, mtu int) (*netlink.Veth, *netlink.Veth, error) {
 	vethPairName := ""
+	// @TODO：生成的 veth 对名称哈希或者是其他需求修改
 	for {
 		_vname, err := RandomVethName()
 		vethPairName = _vname
 		if err != nil {
-			klog.Errorf("生成随机 veth pair 名字失败, err: ", err.Error())
+			klog.Errorf("create name for veth pair failed, err: ", err.Error())
 			return nil, nil, err
 		}
-
+		// 将名字贴到 veth 对象里面
 		_, err = netlink.LinkByName(vethPairName)
 		if err != nil && !os.IsExist(err) {
 			// 上面生成随机名字可能会重名, 所以这里先尝试按照这个名字获取一下
@@ -96,10 +105,12 @@ func CreateVethPair(ifName string, mtu int) (*netlink.Veth, *netlink.Veth, error
 		}
 	}
 
+	// 测试是否完成绑定
 	if vethPairName == "" {
-		return nil, nil, errors.New("生成 veth pair name 失败")
+		return nil, nil, errors.New("generate veth pair name failed")
 	}
 
+	// 创建 veth 对象
 	veth := &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{
 			Name: ifName,
@@ -115,7 +126,7 @@ func CreateVethPair(ifName string, mtu int) (*netlink.Veth, *netlink.Veth, error
 	err := netlink.LinkAdd(veth)
 
 	if err != nil {
-		klog.Errorf("创建 veth 设备失败, err: ", err.Error())
+		klog.Errorf("create veth failed, err: ", err.Error())
 		return nil, nil, err
 	}
 
@@ -124,7 +135,7 @@ func CreateVethPair(ifName string, mtu int) (*netlink.Veth, *netlink.Veth, error
 	if err != nil {
 		// 如果获取失败就尝试删掉
 		netlink.LinkDel(veth1)
-		klog.Errorf("创建完 veth 但是获取失败, err: ", err.Error())
+		klog.Errorf("get created veth1 failed, err: ", err.Error())
 		return nil, nil, err
 	}
 
@@ -133,7 +144,7 @@ func CreateVethPair(ifName string, mtu int) (*netlink.Veth, *netlink.Veth, error
 	if err != nil {
 		// 如果获取失败就尝试删掉
 		netlink.LinkDel(veth2)
-		klog.Errorf("创建完 veth 但是获取失败, err: ", err.Error())
+		klog.Errorf("get created veth2 failed, err: ", err.Error())
 		return nil, nil, err
 	}
 
@@ -144,13 +155,13 @@ func SetIpForVeth(veth *netlink.Veth, podIP string) error {
 	// 给 veth1 也就是 pod(net ns) 里的设备添加上 podIP
 	ipaddr, ipnet, err := net.ParseCIDR(podIP)
 	if err != nil {
-		klog.Errorf("转换 podIP 为 net 类型失败: ", podIP, " err: ", err.Error())
+		klog.Errorf("convert podIP to ns failed ", podIP, " err: ", err.Error())
 		return err
 	}
 	ipnet.IP = ipaddr
 	err = netlink.AddrAdd(veth, &netlink.Addr{IPNet: ipnet})
 	if err != nil {
-		klog.Errorf("给 veth 添加 podIP 失败, podIP 是: ", podIP, " err: ", err.Error())
+		klog.Errorf("attach veth with podIP failed, podIP is: ", podIP, " err: ", err.Error())
 		return err
 	}
 
@@ -158,11 +169,12 @@ func SetIpForVeth(veth *netlink.Veth, podIP string) error {
 }
 
 func SetVethToBridge(veth *netlink.Veth, br *netlink.Bridge) error {
-	// 把 veth2 干到 br 上, veth1 不用, 因为在创建的时候已经被干到 ns 里头了
+	// 把 veth2 加入到 br 上, veth1 不用, 因为在创建的时候已经就是插入到 ns 里头了
+	// veth 创建的时候 veth2 都是在本机当中，需要之后移动他到对应的网桥或者是容器
 	err := netlink.LinkSetMaster(veth, br)
 	if err != nil {
-		klog.Errorf("把 veth 查到网桥上失败, err: ", err.Error())
-		return fmt.Errorf("把 veth %q 插到网桥 %v 失败, err: %v", veth.Attrs().Name, br.Attrs().Name, err)
+		klog.Errorf("attach veth2 to bridge failed, err: ", err.Error())
+		return fmt.Errorf("attach veth %q to bridge %v failed, err: %v", veth.Attrs().Name, br.Attrs().Name, err)
 	}
 	return nil
 }
@@ -170,7 +182,7 @@ func SetVethToBridge(veth *netlink.Veth, br *netlink.Bridge) error {
 func SetVethNsFd(veth *netlink.Veth, ns ns.NetNS) error {
 	err := netlink.LinkSetNsFd(veth, int(ns.Fd()))
 	if err != nil {
-		return fmt.Errorf("把 veth %q 干到 netns 上失败: %v", veth.Attrs().Name, err)
+		return fmt.Errorf("attach veth %q to netns failed: %v", veth.Attrs().Name, err)
 	}
 	return nil
 }
@@ -261,7 +273,7 @@ func SetOtherHostRouteToCurrentHost(networks []*ipam.Network, currentNetwork *ip
 	return nil
 }
 
-// forked from plugins/pkg/ip/route_linux.go
+// AddRoute forked from plugins/pkg/ip/route_linux.go
 func AddRoute(ipn *net.IPNet, gw net.IP, dev netlink.Link) error {
 	return netlink.RouteAdd(&netlink.Route{
 		LinkIndex: dev.Attrs().Index,
@@ -271,7 +283,7 @@ func AddRoute(ipn *net.IPNet, gw net.IP, dev netlink.Link) error {
 	})
 }
 
-// forked from plugins/pkg/ip/route_linux.go
+// AddHostRoute forked from plugins/pkg/ip/route_linux.go
 func AddHostRoute(ipn *net.IPNet, gw net.IP, dev netlink.Link) error {
 	return netlink.RouteAdd(&netlink.Route{
 		LinkIndex: dev.Attrs().Index,
@@ -290,14 +302,14 @@ func AddHostRouteWithVia(ipn *net.IPNet, via *netlink.Via, dev netlink.Link) err
 	})
 }
 
-// forked from plugins/pkg/ip/route_linux.go
+// AddDefaultRoute forked from plugins/pkg/ip/route_linux.go
 func AddDefaultRoute(gw net.IP, dev netlink.Link) error {
 	_, defNet, _ := net.ParseCIDR("0.0.0.0/0")
 	return AddRoute(defNet, gw, dev)
 }
 
-// forked from /plugins/pkg/ip/link_linux.go
-// RandomVethName returns string "veth" with random prefix (hashed from entropy)
+// RandomVethName forked from /plugins/pkg/ip/link_linux.go
+// returns string "veth" with random prefix (hashed from entropy)
 func RandomVethName() (string, error) {
 	entropy := make([]byte, 4)
 	_, err := rand.Read(entropy)
@@ -343,51 +355,51 @@ func CreateBridgeAndCreateVethAndSetNetworkDeviceStatusAndSetVethMaster(
 	// 先创建网桥
 	br, err := CreateBridge(brName, gw, mtu)
 	if err != nil {
-		klog.Errorf("创建网卡失败, err: ", err.Error())
+		klog.Errorf("create bridge failed, err: ", err.Error())
 		return err
 	}
 
 	err = netns.Do(func(hostNs ns.NetNS) error {
-		// 创建一对儿 veth 设备
+		// 创建一对 veth 设备
 		containerVeth, hostVeth, err := CreateVethPair(ifName, mtu)
 		if err != nil {
-			klog.Errorf("创建 veth 失败, err: ", err.Error())
+			klog.Errorf("create veth pair failed, err: ", err.Error())
 			return err
 		}
 
 		// 把随机起名的 veth 那头放在主机上
 		err = SetVethNsFd(hostVeth, hostNs)
 		if err != nil {
-			klog.Errorf("把 veth 设置到 ns 下失败: ", err.Error())
+			klog.Errorf("attach veth to ns failed: ", err.Error())
 			return err
 		}
 
-		// 然后把要被放到 pod 中的那头 veth 塞上 podIP
+		// 然后把要被放到 pod 中的那头 veth 标上 podIP
 		err = SetIpForVeth(containerVeth, podIP)
 		if err != nil {
-			klog.Errorf("给 veth 设置 ip 失败, err: ", err.Error())
+			klog.Errorf("set veth ip failed, err: ", err.Error())
 			return err
 		}
 
-		// 然后启动它
+		// 然后启动 veth 对
 		err = SetUpVeth(containerVeth)
 		if err != nil {
-			klog.Errorf("启动 veth pair 失败, err: ", err.Error())
+			klog.Errorf("setup veth pair failed, err: ", err.Error())
 			return err
 		}
 
 		// 启动之后给这个 netns 设置默认路由 以便让其他网段的包也能从 veth 走到网桥
-		// TODO: 实测后发现还必须得写在这里, 如果写在下面 hostNs.Do 里头会报错目标 network 不可达(why?)
+		// TODO: 实测后发现还必须得写在这里, 如果写在下面 hostNs.Do 里头会报错目标
 		gwNetIP, _, err := net.ParseCIDR(gw)
 		if err != nil {
-			klog.Errorf("转换 gwip 失败, err:", err.Error())
+			klog.Errorf("get gateWay IP failed, err:", err.Error())
 			return err
 		}
 
 		// 给 pod(net ns) 中加一个默认路由规则, 该规则让匹配了 0.0.0.0 的都走上边创建的那个 container veth
 		err = SetDefaultRouteToVeth(gwNetIP, containerVeth)
 		if err != nil {
-			klog.Errorf("SetDefaultRouteToVeth 时出错, err: ", err.Error())
+			klog.Errorf("SetDefaultRouteToVeth failed, err: ", err.Error())
 			return err
 		}
 
@@ -396,20 +408,20 @@ func CreateBridgeAndCreateVethAndSetNetworkDeviceStatusAndSetVethMaster(
 			_hostVeth, err := netlink.LinkByName(hostVeth.Attrs().Name)
 			hostVeth = _hostVeth.(*netlink.Veth)
 			if err != nil {
-				klog.Errorf("重新获取 hostVeth 失败, err: ", err.Error())
+				klog.Errorf("get  hostVeth failed, err: ", err.Error())
 				return err
 			}
 			// 启动它
 			err = SetUpVeth(hostVeth)
 			if err != nil {
-				klog.Errorf("启动 veth pair 失败, err: ", err.Error())
+				klog.Errorf("setup veth pair for bridge failed, err: ", err.Error())
 				return err
 			}
 
 			// 把它塞到网桥上
-			err = SetVethMaster(hostVeth, br)
+			err = SetVethToBridge(hostVeth, br)
 			if err != nil {
-				klog.Errorf("挂载 veth 到网桥失败, err: ", err.Error())
+				klog.Errorf("attach veth to bridge, err: ", err.Error())
 				return err
 			}
 

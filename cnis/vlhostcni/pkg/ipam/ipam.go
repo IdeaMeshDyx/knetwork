@@ -1,8 +1,11 @@
 package ipam
 
 /**
+ * 首先在节点上启动 etcd client ，再使用以下指令进行访问
  * 可通过命令查看 etcd 集群状态
  * ETCDCTL_API=3 etcdctl --endpoints https://192.168.98.143:2379 --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/healthcheck-client.crt --key /etc/kubernetes/pki/etcd/healthcheck-client.key get / --prefix --keys-only
+ * ipam @TODO：优化地址分配和计算方式，得接入 Kubeedge API 才行，也就是说得重新全部重写
+ * 参考 CNI 仓库的实现，进行地址分配，
  */
 
 import (
@@ -21,7 +24,7 @@ import (
 )
 
 const (
-	prefix = "testcni/ipam"
+	prefix = "edgemesh/ipam"
 )
 
 type Get struct{ etcdClient *etcd.EtcdClient }
@@ -38,6 +41,7 @@ type operator struct {
 	*operators
 }
 
+// 网络配置信息
 type Network struct {
 	Name          string
 	IP            string
@@ -46,15 +50,18 @@ type Network struct {
 	IsCurrentHost bool
 }
 
+// 请求的 IPAM 信息
 type IpamService struct {
 	Subnet string
 	// Mask        string
 	MaskSegment string
 	MaskIP      string
-	EtcdClient  *etcd.EtcdClient
+	// @TODO：该换成 Client-go
+	EtcdClient *etcd.EtcdClient
 	*operator
 }
 
+// 访存维护一致性
 var _lock sync.Mutex
 var _isLocking bool
 
@@ -149,6 +156,7 @@ var getRelase = func() func() *Release {
 	}
 }()
 
+// 将所分配的网段+1作为网桥地址--》网关
 func isGatewayIP(ip string) bool {
 	// 把每个网段的 x.x.x.1 当做网关
 	if ip == "" {
@@ -158,6 +166,7 @@ func isGatewayIP(ip string) bool {
 	return _arr[3] == "1"
 }
 
+// 设置预留地址
 func isRetainIP(ip string) bool {
 	// 把每个网段的 x.x.x.0 当做保留
 	if ip == "" {
@@ -169,7 +178,8 @@ func isRetainIP(ip string) bool {
 
 func (s *Set) IPs(ips ...string) error {
 	defer unlock()
-	// 先拿到当前主机对应的网段
+	// @TODO:APIServer 该怎么获取呢？ rpc 吗？
+	// 先从 etcd 拿到当前主机对应的网段
 	currentNetwork, err := s.etcdClient.Get(getHostPath())
 	if err != nil {
 		return err

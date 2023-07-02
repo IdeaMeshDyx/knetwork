@@ -20,6 +20,8 @@ type PluginConf struct {
 	} `json:"runtimeConfig"`
 
 	// 这里可以自由定义自己的 plugin 中配置了的参数然后自由处理
+	// 目前就考虑了在一个Bridge 上链接所有的容器
+	//@TODO：IPIP，VXLAN等等，具体该使用哪一个方案呢？
 	Bridge string `json:"bridge"`
 	Subnet string `json:"subnet"`
 }

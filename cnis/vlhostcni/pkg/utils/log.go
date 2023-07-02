@@ -7,6 +7,11 @@ import (
 	"os"
 )
 
+/**
+**	本文档主要是为了能够在调试的时候单独将CNI的日志信息打印出来，不会依附在 K8S 那一套json里面
+**	最后是否保留看情况
+**
+ */
 const logPath string = "/home/ding/go/k8s-cni-test/test-cni.log"
 const logErrPath string = "/home/ding/go/k8s-cni-test/log.error.txt"
 
