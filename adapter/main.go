@@ -3,7 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/coreos/go-iptables/iptables"
+	"ideammesh/adapter/iptables"
+
 	"github.com/spf13/viper"
 )
 
@@ -16,30 +17,44 @@ func main() {
 	}
 
 	// 在 nat table 创建EdgeMesh链
-	err = ipt.NewChain("nat", "EdgeMesh")
+	err = ipt.NewChain("nat", "PREROUTING")
 	if err != nil {
-		fmt.Println("Error creating EdgeMesh chain: ", err)
+		fmt.Println("Error creating EdgeMesh chains: ", err)
 		return
 	}
 
+	// 读取配置文件
+	// TODO： 接入到 EdgeMesh 中，需要商量这个配置文件的位置
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath("./config")
+	err = viper.ReadInConfig()
+	if err != nil {
+		fmt.Println("Error reading config file: ", err)
+		return
+	}
+
+	//edgeIP := viper.GetStringSlice("edge.ip")
+	//cloudIP := viper.GetStringSlice("cloud.ip")
+
+
 	// 插入规则，在 PREROUTING 时候将目标地址是edge网段的数据包都拦截转发到应用层的进程
-	ruleSpec := []string{"-s", edgeIP + "/" + edgeMask, "-j", "DNAT", "--to-destination", appIP + ":" + appPort}
-	err = ipt.Append("nat", "PREROUTING", ruleSpec...)
+	ruleSpec := iptables.Rule{"nat", "PREROUTING", []string{"-p", "all", "-d", "10.244.12.0/24", "-j", "DNAT", "--to-destination", "169.254.96.16:35269"}}
+	err = ipt.Append(ruleSpec)
 	if err != nil {
 		fmt.Println("Error inserting rule: ", err)
 		return
 	}
-
 	fmt.Println("EdgeMesh chain created and rule inserted successfully.")
 }
 
 type Adapter interface {
 	// 配置文件中获取云边的网段地址
-	getCIDR() (cidr, error)
+	getCIDR() error
 
 	// 获取 EdgeTunnel 的端口
 	// @TODO 创建独立的 EDGETUNNEL
-	getTunnel() (string, error)
+	getTunnel() error
 
 	// 创建 EDGEMESH 链 并依据Tunnel 信息插入转发规则
 	applyRules() (bool, error)
@@ -51,13 +66,17 @@ type Adapter interface {
 	updateRules() error
 }
 
-type cidr struct {
+type MeshAdapter struct {
+	// 创建的Tunnel list，每个 Pod IP地址对应一个端口
+	tunnel map[int]string
+	// 云上的区域网段
 	cloud []string
-	edge  []string
+	// 边缘的区域网段
+	edge []string
 }
 
 // 从配置文件中获取不同网段的地址
-func getCIDR() cidr {
+func (mesh *MeshAdapter) getCIDR() error {
 	// 读取配置文件
 	// TODO： 接入到 EdgeMesh 中，需要商量这个配置文件的位置
 	viper.SetConfigName("config")
@@ -66,17 +85,22 @@ func getCIDR() cidr {
 	err := viper.ReadInConfig()
 	if err != nil {
 		fmt.Println("Error reading config file: ", err)
-		return nil
+		return err
 	}
 
-	edgeIP := viper.GetString("edge.ip")
-	cloudIP := viper.GetString("cloud.ip")
+	edgeIP := viper.GetStringSlice("edge.ip")
+	cloudIP := viper.GetStringSlice("cloud.ip")
 
-	c := &cidr{
-		cloud: cloudIp,
-		edge:  edgeIP,
-	}
-	fmt.Printf("get ip info: edge %s/%s, edgemesh info: %s:%s ", edgeIP, edgeMask, appIP, appPort)
+	// TODO: 去重还有标记
+	mesh.edge = append(mesh.edge, edgeIP...)
+	mesh.cloud = append(mesh.cloud, cloudIP...)
 
-	return c
+	fmt.Printf("get ip info: edge %s, cloud info: %s ", edgeIP, cloudIP)
+	return nil
 }
+
+func (mesh *MeshAdapter) getTunnel() error { return nil }
+
+func (mesh *MeshAdapter) applyRules() (bool, error) { return true, nil }
+func (mesh *MeshAdapter) watchRules() error         { return nil }
+func (mesh *MeshAdapter) updateRules() error        { return nil }

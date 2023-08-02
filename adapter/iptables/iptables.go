@@ -7,36 +7,36 @@ import (
 
 // rule represents an iptables rule.
 type Rule struct {
-	table string
-	chain string
-	spec  []string
+	Table string
+	Chain string
+	Spec  []string
 }
 
-// iptable Operation include all the operation to interact with iptables
+// IptOp iptable Operation include all the operation to interact with iptables
 type IptOp interface {
-	// insert rules in the table
+	// Append insert rules in the table
 	Append(rule Rule) error
 
-	// insert single rule into the position of the table
+	// InsertUnique insert single rule into the position of the table
 	InsertUnique(rule Rule, pos int) error
 
-	// delete rule from the table
+	// Delete rule from the table
 	Delete(rule Rule) error
 
-	// check if the rules are right
+	// Exists check if the rules are right
 	Exists(rule Rule) (bool, error)
 
-	// list all the rules from the chain
+	// List show all the rules from the chain
 	List(table string, chain string) ([]string, error)
 
-	// clear the chain
+	// ClearChain clear the chain
 	ClearChain(table string, chain string) error
 
-	// create a new chain
+	// NewChain create a new chain
 	NewChain(table string, chain string) error
 }
 
-// iptable Iptutil to control the rules
+// Iptutil iptable tools to control the rules
 type Iptutil struct {
 	// coreos/go-iptables added  contains filtered or unexported fields
 	ipt *iptables.IPTables
@@ -45,7 +45,7 @@ type Iptutil struct {
 	ruleSet []Rule
 }
 
-// init operator to control ipatbles
+// New init operator to control ipatbles
 func New() (IptOp, error) {
 	// init ipatbles operator for ipv4 rules
 	// TODO: add IPV6 support
@@ -57,7 +57,7 @@ func New() (IptOp, error) {
 	}
 	klog.Infof("create iptables operator success")
 
-	return &Iptutil{ipt}, nil
+	return &Iptutil{ipt, []Rule{}}, nil
 }
 
 func (iptutil *Iptutil) Append(rule Rule) error {
@@ -65,14 +65,14 @@ func (iptutil *Iptutil) Append(rule Rule) error {
 	ok, err := iptutil.Exists(rule)
 	// if there is no such rule then add it
 	if err == nil && !ok {
-		err = iptutil.ipt.AppendUnique(rule)
+		err = iptutil.ipt.AppendUnique(rule.Table, rule.Chain, rule.Spec...)
 		klog.Infof("this rule is not exist, start to insert it")
 	}
 	if err != nil {
-		klog.Errorf("error on iptables.AppendUnique in table %v on chain %v for rule %v, err ", rule.table, rule.chain, rule.spec, err)
+		klog.Errorf("error on iptables.AppendUnique in table %v on chain %v for rule %v, err ", rule.Table, rule.Chain, rule.Spec, err)
 		return err
 	}
-	klog.Infof("iptables.AppendUnique succeeded in table %v on chain %v for rule %v", rule.table, rule.chain, rule.spec)
+	klog.Infof("iptables.AppendUnique succeeded in table %v on chain %v for rule %v", rule.Table, rule.Chain, rule.Spec)
 
 	return nil
 }
@@ -81,40 +81,40 @@ func (iptutil *Iptutil) InsertUnique(rule Rule, pos int) error {
 	exists, err := iptutil.Exists(rule)
 	// if there is no such rule then add it in the special position
 	if err == nil && !exists {
-		err = iptutil.ipt.Insert(rule.table, rule.chain, pos, rule.spec)
+		err = iptutil.ipt.Insert(rule.Table, rule.Chain, pos, rule.Spec...)
 		klog.Infof("this rule is not exist, start to insert it on the position %v", pos)
 	}
 	if err != nil {
-		klog.Errorf("error on iptables.AppendUnique in table %v on chain %v  at position %v for rule %v, err ", rule.table, rule.chain, pos, rule.spec, err)
+		klog.Errorf("error on iptables.AppendUnique in table %v on chain %v  at position %v for rule %v, err ", rule.Table, rule.Chain, pos, rule.Spec, err)
 		return err
 	}
-	klog.Infof("iptables.AppendUnique succeeded in table %v on chain %v at position %v for rule %v", rule.table, rule.chain, pos, rule.spec)
+	klog.Infof("iptables.AppendUnique succeeded in table %v on chain %v at position %v for rule %v", rule.Table, rule.Chain, pos, rule.Spec)
 	return nil
 }
 
 func (iptutil *Iptutil) Delete(rule Rule) error {
 	// delete the rule
-	err := iptutil.ipt.DeleteIfExists(rule.table, rule.chain, rule.spec)
+	err := iptutil.ipt.DeleteIfExists(rule.Table, rule.Chain, rule.Spec...)
 	if err != nil {
-		klog.Errorf("error on iptables.Delete in table %v on chain %v for rule %v, err ", rule.table, rule.chain, rule.spec, err)
+		klog.Errorf("error on iptables.Delete in table %v on chain %v for rule %v, err ", rule.Table, rule.Chain, rule.Spec, err)
 		return err
 	}
-	klog.Infof("iptables.Delete succeeded in table %v on chain %v for rule %v", rule.table, rule.chain, rule.spec)
+	klog.Infof("iptables.Delete succeeded in table %v on chain %v for rule %v", rule.Table, rule.Chain, rule.Spec)
 	return nil
 }
 
 func (iptutil *Iptutil) Exists(rule Rule) (bool, error) {
 	// check if the rule exist in the table
-	exists, err := iptutil.ipt.Exists(rule.table, rule.chain, rule.spec)
+	exists, err := iptutil.ipt.Exists(rule.Table, rule.Chain, rule.Spec...)
 	if err == nil && !exists {
-		klog.Infof("rule is not exist in table %v on chain %v", rule.table, rule.chain, rule.spec)
+		klog.Infof("rule is not exist in table %v on chain %v", rule.Table, rule.Chain, rule.Spec)
 		return false, nil
 	}
 	if err != nil {
-		klog.Errorf("error on iptables.Exists in table %v on chain %v for rule %v, err ", rule.table, rule.chain, rule.spec, err)
+		klog.Errorf("error on iptables.Exists in table %v on chain %v for rule %v, err ", rule.Table, rule.Chain, rule.Spec, err)
 		return false, err
 	}
-	klog.Infof("iptables rules exist in table %v on chain %v", rule.table, rule.chain)
+	klog.Infof("iptables rules exist in table %v on chain %v", rule.Table, rule.Chain)
 	return true, nil
 }
 
@@ -134,7 +134,7 @@ func (iptutil *Iptutil) ClearChain(table string, chain string) error {
 	err := iptutil.ipt.ClearAndDeleteChain(table, chain)
 	if err != nil {
 		klog.Errorf("error on iptables.ClearAndDeleteChain in table %v on chain %v  err ", table, chain, err)
-		return nil, err
+		return err
 	}
 	klog.Infof("iptables.ClearAndDeleteChain succeeded, in table %v on chain %v ", table, chain)
 	return nil
