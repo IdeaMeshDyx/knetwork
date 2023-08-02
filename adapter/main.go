@@ -39,7 +39,7 @@ func main() {
 
 
 	// 插入规则，在 PREROUTING 时候将目标地址是edge网段的数据包都拦截转发到应用层的进程
-	ruleSpec := iptables.Rule{"nat", "PREROUTING", []string{"-p", "all", "-d", "10.244.12.0/24", "-j", "DNAT", "--to-destination", "169.254.96.16:42707"}}
+	ruleSpec := iptables.Rule{"nat", "PREROUTING", []string{"-p", "tcp", "-d", "10.244.12.0/24", "-j", "DNAT", "--to-destination", "169.254.96.16:42707"}}
 	err = ipt.Append(ruleSpec)
 	if err != nil {
 		fmt.Println("Error inserting rule: ", err)
