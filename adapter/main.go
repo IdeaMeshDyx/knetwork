@@ -17,7 +17,7 @@ func main() {
 	}
 
 	// 在 nat table 创建EdgeMesh链
-	err = ipt.NewChain("nat", "PREROUTING")
+	err = ipt.NewChain("nat", "EDGEMESH")
 	if err != nil {
 		fmt.Println("Error creating EdgeMesh chains: ", err)
 		return
