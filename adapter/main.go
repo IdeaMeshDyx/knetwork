@@ -37,9 +37,16 @@ func main() {
 	//edgeIP := viper.GetStringSlice("edge.ip")
 	//cloudIP := viper.GetStringSlice("cloud.ip")
 
+	// 插入一条规则将所有到10.244.12.0/24网段的所有协议的流量拦截到EDGEMESH链匹配规则
+	ruleEdge := iptables.Rule{"nat", "PREROUTING", []string{"-p", "all", "-d", "10.244.12.0/24", "-j", "EDGEMESH"}}
+	err = ipt.InsertUnique(ruleEdge, 1)
+	if err != nil {
+		fmt.Println("Error inserting rule to PREROUTING chain:", err)
+		return
+	}
 
 	// 插入规则，在 PREROUTING 时候将目标地址是edge网段的数据包都拦截转发到应用层的进程
-	ruleSpec := iptables.Rule{"nat", "PREROUTING", []string{"-p", "tcp", "-d", "10.244.12.0/24", "-j", "DNAT", "--to-destination", "169.254.96.16:42707"}}
+	ruleSpec := iptables.Rule{"nat", "EDGEMESH", []string{"-p", "all", "-d", "10.244.12.0/24", "-j", "DNAT", "--to-destination", "169.254.96.16:42707"}}
 	err = ipt.Append(ruleSpec)
 	if err != nil {
 		fmt.Println("Error inserting rule: ", err)
