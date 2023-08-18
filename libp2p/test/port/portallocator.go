@@ -5,10 +5,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/net"
 )
 
-func getPort() int {
+func GetPort() int {
 	// 设置端口范围
 	maxPort := 60001
-	portRange := net.PortRange{40000, 60000}
+	portRange := net.PortRange{40000, 600}
 	// 创建一个 PortAllocator
 	portAllocator := newPortAllocator(portRange)
 
