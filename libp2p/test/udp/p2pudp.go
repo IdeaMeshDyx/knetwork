@@ -47,7 +47,6 @@ func (r *RdpProxy) handleConn(rdpOpt RdpProxyOpt, conn net.Conn) {
 func NewRdpProxy() *RdpProxy {
 	r := &RdpProxy{}
 	return r
-
 }
 
 func (r *RdpProxy) OpenNewRdpProxy(opt RdpProxyOpt) {

@@ -13,7 +13,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/pnet"
 	"github.com/libp2p/go-libp2p/core/routing"
-	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	relayv2 "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
@@ -159,14 +158,14 @@ func newEdgeTunnel(c *v1alpha1.EdgeTunnelConfig) (*EdgeTunnel, error) {
 			ddht, err = newDHT(ctx, h, relayMap)
 			return ddht, err
 		}),
-		libp2p.EnableAutoRelay(
-			autorelay.WithPeerSource(func(numPeers int) <-chan peer.AddrInfo {
-				return peerSource
-			}, 15*time.Second),
-			autorelay.WithMinCandidates(0),
-			autorelay.WithMaxCandidates(c.MaxCandidates),
-			autorelay.WithBackoff(30*time.Second),
-		),
+		/*		libp2p.EnableAutoRelay(
+				autorelay.WithPeerSource(func(numPeers int) <-chan peer.AddrInfo {
+					return peerSource
+				}, 15*time.Second),
+				autorelay.WithMinCandidates(0),
+				autorelay.WithMaxCandidates(c.MaxCandidates),
+				autorelay.WithBackoff(30*time.Second),
+			),*/
 		libp2p.EnableNATService(),
 		libp2p.EnableHolePunching(),
 	}...)
