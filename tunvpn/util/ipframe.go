@@ -63,7 +63,29 @@ type Option struct {
 	Value uint16
 }
 
-func ParseIPFrame(buffer buf.Buffer) (*IPFrame, error) {
+// ParseIPFrame TUN - IPv4 Packet:
+//
+//	+---------------------------------------------------------------------------------------------------------------+
+//	|       | Octet |           0           |           1           |           2           |           3           |
+//	| Octet |  Bit  |00|01|02|03|04|05|06|07|08|09|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|
+//	+---------------------------------------------------------------------------------------------------------------+
+//	|   0   |   0   |  Version  |    IHL    |      DSCP       | ECN |                 Total  Length                 |
+//	+---------------------------------------------------------------------------------------------------------------+
+//	|   4   |  32   |                Identification                 | Flags  |           Fragment Offset            |
+//	+---------------------------------------------------------------------------------------------------------------+
+//	|   8   |  64   |     Time To Live      |       Protocol        |                Header Checksum                |
+//	+---------------------------------------------------------------------------------------------------------------+
+//	|  12   |  96   |                                       Source IP Address                                       |
+//	+---------------------------------------------------------------------------------------------------------------+
+//	|  16   |  128  |                                    Destination IP Address                                     |
+//	+---------------------------------------------------------------------------------------------------------------+
+//	|  20   |  160  |                                     Options (if IHL > 5)                                      |
+//	+---------------------------------------------------------------------------------------------------------------+
+//	|  24   |  192  |                                                                                               |
+//	|  30   |  224  |                                            Payload                                            |
+//	|  ...  |  ...  |                                                                                               |
+//	+---------------------------------------------------------------------------------------------------------------+
+func ParseIPFrame(buffer buf.ByteBuffer) (*IPFrame, error) {
 	// no enough data for first 4 bytes
 	if buffer.ReadableBytes() < 4 {
 		return nil, nil
@@ -161,7 +183,7 @@ func ParseIPFrame(buffer buf.Buffer) (*IPFrame, error) {
 	}, nil
 }
 
-func (frame *IPFrame) String() string {
+func (frame *IPFrame) Strings() string {
 	return fmt.Sprintf("IPFrame {\n"+
 		"\tversion=%d\n"+
 		"\theaderLen=%d\n"+
@@ -190,6 +212,22 @@ func (frame *IPFrame) String() string {
 		frame.Source.String(),
 		frame.Target.String(),
 		len(frame.Payload))
+}
+
+func (frame *IPFrame) GetProtocol() string {
+	return fmt.Sprintf("\tprotocol=%d\n", frame.Protocol)
+}
+
+func (frame *IPFrame) GetSourceIP() string {
+	return frame.Source.String()
+}
+
+func (frame *IPFrame) GetTargetIP() string {
+	return frame.Target.String()
+}
+
+func (frame *IPFrame) GetPayloadLen() int {
+	return len(frame.Payload)
 }
 
 func (frame *IPFrame) ToBytes() []byte {
