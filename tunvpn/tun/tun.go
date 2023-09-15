@@ -246,10 +246,9 @@ func (tun *TunIf) TunWriteLoop() {
 	// buffer to write data
 	buffer := buf.NewRecycleByteBuffer(65536)
 	packet := make([]byte, 65536)
-	for {
+	for packet = range tun.WritePipe {
 		// transfer data to libP2P
 		//tun.TcpReceivePipe <- frame.ToBytes()
-		packet = <-tun.WritePipe
 		if n := len(packet); n == 0 {
 			klog.Error("failed to read from tcp tunnel")
 		}

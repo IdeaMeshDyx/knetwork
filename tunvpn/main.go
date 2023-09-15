@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"syscall"
+	"time"
 	"tunvpn/tun"
 	"tunvpn/util"
 )
@@ -79,34 +80,40 @@ func initTun() {
 }
 
 func HandleReceiveFromTun() {
-	buffer := buf.NewRecycleByteBuffer(65536)
-	c0, c1 := net.Pipe()
+	//buffer := buf.NewRecycleByteBuffer(65536)
+	//c0, c1 := net.Pipe()
 	stream := tcpSendLoop()
-	for {
+	//packet := make([]byte, 65536)
+	for bytes := range tunD.ReceivePipe {
+		_, err := stream.Write(bytes)
+		if err != nil {
+			return
+		}
+	}
+	/*for {
 		select {
 		case <-c:
 			klog.Infof("Close HandleReceive Process")
 			return
-		default:
-			klog.Infof("Start Receive")
-			packet := <-tunD.ReceivePipe
-			_, err := c1.Write(packet)
+		case packet = <-tunD.ReceivePipe:
+			klog.Infof("Get Tun Receive %d", len(tunD.ReceivePipe))
+
+			n, err := c1.Write(packet)
 			if err != nil {
 				klog.Errorf("Error writing data: %v\n", err)
 				return
 			}
-			//set CNI Options
-			buffer.Write(packet[:len(packet)])
+			buffer.Write(packet[:n])
 			frame, err := util.ParseIPFrame(buffer)
 			klog.Infof("frame IP is :", frame.GetTargetIP())
 			if err != nil {
 				klog.Errorf("l3 adapter get proxy stream from %s error: %w", frame.GetSourceIP(), err)
 				return
 			}
-			util.ProxyConn(stream, c0)
+			go util.ProxyConn(stream, c0)
 			klog.Infof("Success proxy to %v", tunD)
 		}
-	}
+	}*/
 
 }
 
@@ -120,13 +127,12 @@ func Dial() net.Conn {
 		for {
 			// read from tun Dev
 			n, _ := c0.Read(packet)
-			klog.Infof("Start Receive From Tunnel")
 			// get data from tun
 			buffer.Write(packet[:n])
 			for {
 				// Get IP frame to byte data to encapsulate
 				frame, err := util.ParseIPFrame(buffer)
-
+				klog.Infof("Start Receive From Tunnel,IPframe is:%s", frame.GetTargetIP())
 				if err != nil {
 					klog.Errorf("Parse frame failed:", err)
 					buffer.Clean()
@@ -162,6 +168,22 @@ func tcpSendLoop() net.Conn {
 	log.Println("try to connect peer")
 
 	conn, err = net.DialTCP("tcp", nil, tcpAddr)
+	if err != nil {
+		klog.Error("connec to %s:%d failed", peerIp, peerPort)
+	}
+
+	for {
+		if err == nil {
+			log.Println("connect peer success")
+			break
+		}
+
+		log.Printf("try to reconnect 1s later, addr=%s, err=%v", tcpAddr.String(), err)
+
+		time.Sleep(time.Second)
+
+		conn, err = net.DialTCP("tcp", nil, tcpAddr)
+	}
 
 	return conn
 }
@@ -169,7 +191,7 @@ func tcpSendLoop() net.Conn {
 func tcpListenerLoop() {
 	var err error
 
-	tcpAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", peerIp.String(), peerPort))
+	tcpAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", "0.0.0.0", peerPort))
 	klog.Infof("ip: %s", tcpAddr)
 	klog.Errorf("failed to parse tcpAddr", err)
 
@@ -183,7 +205,20 @@ func tcpListenerLoop() {
 	}
 
 	klog.Infof(" Start to Dial")
-	tunConn := Dial()
-	log.Println("accept peer success")
-	go util.ProxyConn(streamConn, tunConn)
+	//tunConn := Dial()
+
+	packet := make([]byte, 65536)
+	// TODO: improve the following double for logic
+	for {
+		// read from tun Dev
+		_, err2 := streamConn.Read(packet)
+		if err2 != nil {
+			return
+		}
+		// get data from tun
+
+		tunD.WritePipe <- packet
+
+	}
+	//go util.ProxyConn(streamConn, tunConn)
 }
